@@ -115,3 +115,78 @@ A maker-checker human-in-the-loop that manually review applicants falling into h
 | **Isolation Forest (Anomaly)** | - | - | 11 / 15 (73.3%) | - | - |
 
 I recommend deploying the Logistic Regression model for the Paytm Postpaid product. It achieved a superior ROC AUC of [0.7188] compared to the Decision Tree's [0.5188], indicating a stronger overall mathematical ability to distinguish between legitimate borrowers and potential defaulters. Furthermore, Logistic Regression outputs continuous, reliable predicted probabilities, which successfully enabled the creation of our strict, 4-tier monotonic risk-based pricing framework (allowing us to assign lower rates to safer segments). Finally, for a highly regulated financial product like Postpaid, Logistic Regression provides clear, linear explainability to regulators and auditors, making it much easier to monitor for the proxy biases identified in our governance review.
+
+
+
+---
+
+
+
+Part 3
+
+Project Setup- All scripts in this module were executed using the strictly deterministic, rule-based baseline mode (MOCK_LLM=1). No external network calls or LLM API keys were utilized, ensuring fully reproducible grading against the prescribed mathematical and logical constraints.
+
+Advisory Agent Transcripts (advisory_agent.py)
+
+--- RUNNING ADVISORY AGENT (MOCK_LLM=1) ---
+
+[INV01] Status: AUTO_FINALIZED
+For Conservative investor INV01, we recommend an allocation across ['PAYBOND', 'PAYGOLD', 'PAYRETAIL'] with an expected portfolio return of 9.2% and volatility of 8.4%.
+-----------------------------------------------------------------
+[INV02] Status: AUTO_FINALIZED
+For Moderate investor INV02, we recommend an allocation across ['PAYRETAIL', 'PAYINFRA', 'PAYGOLD'] with an expected portfolio return of 11.3% and volatility of 12.6%.
+-----------------------------------------------------------------
+[INV03] Status: ESCALATED_TO_HUMAN_ADVISOR
+FLAG: ESCALATED_TO_HUMAN_ADVISOR - Computed portfolio std dev (20.58%) exceeds 20% safety limit.
+-----------------------------------------------------------------
+[INV04] Status: AUTO_FINALIZED
+For Moderate investor INV04, we recommend an allocation across ['PAYRETAIL', 'PAYINFRA', 'PAYGOLD'] with an expected portfolio return of 11.3% and volatility of 12.6%.
+-----------------------------------------------------------------
+[INV05] Status: ESCALATED_TO_HUMAN_ADVISOR
+FLAG: ESCALATED_TO_HUMAN_ADVISOR - Computed portfolio std dev (20.58%) exceeds 20% safety limit.
+-----------------------------------------------------------------
+
+Structured Disclosure Extraction (extract_disclosure.py)
+
+--- RUNNING DISCLOSURE EXTRACTION (MOCK_LLM=1) ---
+
+[doc_01] Extraction Result:
+{'risk_flags': [], 'hedging_detected': True, 'sentiment': 'cautious'}
+--------------------------------------------------
+[doc_02] Extraction Result:
+{'risk_flags': ['litigation'], 'hedging_detected': False, 'sentiment': 'neutral'}
+--------------------------------------------------
+[doc_03] Extraction Result:
+{'risk_flags': ['customer concentration'], 'hedging_detected': False, 'sentiment': 'neutral'}
+--------------------------------------------------
+[doc_04] Extraction Result:
+{'risk_flags': [], 'hedging_detected': True, 'sentiment': 'cautious'}
+--------------------------------------------------
+[doc_05] Extraction Result:
+{'risk_flags': [], 'hedging_detected': False, 'sentiment': 'confident'}
+--------------------------------------------------
+[doc_06] Extraction Result:
+{'risk_flags': ['regulatory'], 'hedging_detected': False, 'sentiment': 'neutral'}
+--------------------------------------------------
+
+Multi-Agent Debate Demo (debate.py)
+
+--- RUNNING 3-AGENT DEBATE FOR PAYTECH (MOCK_LLM=1) ---
+
+BULL AGENT: With an impressive analyst expected return of 19.0% against a beta of 1.55, PAYTECH offers highly attractive upside potential. The growth trajectory easily justifies the allocation.
+
+BEAR AGENT: I strongly disagree. A standard deviation of 34.0% indicates excessive, dangerous volatility. Holding PAYTECH introduces far too much uncompensated risk to a stable portfolio under current market conditions.
+
+SYNTHESIZER AGENT: This debate highlights a classic high-risk, high-reward dynamic. While the Bull correctly identifies the compelling 19.0% expected return, the Bear is right to flag the severe 34.0% volatility. Recommendation: Permit allocation only for Aggressive risk profiles, with strict position sizing.
+-----------------------------------------------------------------
+
+DCF Valuation & Sensitivity Analysis (dcf_calculator.py)
+
+--- SENSITIVITY TABLE: IMPLIED EV (Millions INR) ---
+              TG: 3.0%  TG: 4.0%  TG: 5.0%
+WACC: 11.97%  ₹4538.1M  ₹4969.4M  ₹5524.4M
+WACC: 12.97%  ₹4061.1M  ₹4393.8M  ₹4810.1M
+WACC: 13.97%  ₹3671.8M  ₹3934.4M  ₹4255.6M
+
+DCF vs. EV/EBITDA Cross-Check:
+The implied Enterprise Value from our DCF model (₹4,393.84M) came in lower than our simple EV/EBITDA cross-check (₹6,000.00M at a 10x multiple). This discrepancy is expected, as our DCF utilizes a conservative 12.97% WACC and heavily penalizes the cash flows in the terminal year to maintain a safe 8.97% spread against our terminal growth rate. The 10x EBITDA multiple reflects a more optimistic broader market sentiment that has not been explicitly risk-adjusted for PAYFIN's specific 1.35 beta.

@@ -1,162 +1,112 @@
-{
- "cells": [
-  {
-   "cell_type": "code",
-   "execution_count": 1,
-   "id": "650cd6fe-2709-4521-8aef-45b62133f187",
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "import random\n",
-    "import numpy as np\n",
-    "import pandas as pd\n",
-    "from datetime import datetime, timedelta"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": 15,
-   "id": "a18f55ee-9a13-4e7b-abb9-dbcef15ff575",
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "random.seed(42)\n",
-    "np.random.seed(42)\n",
-    "CATEGORIES = [\"grocery\", \"food_delivery\", \"recharge\", \"bill_payment\", \"travel\",\n",
-    "              \"ecommerce\", \"entertainment\"]\n",
-    "REGIONS = [\"North\", \"South\", \"East\", \"West\"]\n",
-    "METHODS = [\"UPI\", \"Wallet\", \"Card\", \"Netbanking\"]\n",
-    "METHOD_WEIGHTS = [0.55, 0.20, 0.15, 0.10]\n",
-    "AMOUNTS_INR = [49, 99, 149, 299, 499, 799, 1499, 2999, 4999]\n",
-    "AMOUNT_WEIGHTS = [0.18, 0.16, 0.14, 0.14, 0.12, 0.10, 0.08, 0.05, 0.03]\n",
-    "\n",
-    "# --- 40 merchants ---\n",
-    "merchants = pd.DataFrame({\n",
-    "    \"merchant_id\": range(1, 41),\n",
-    "    \"merchant_name\": [f\"Merchant_{i:03d}\" for i in range(1, 41)],\n",
-    "    \"category\": [random.choice(CATEGORIES) for _ in range(40)],\n",
-    "    \"region\": [random.choice(REGIONS) for _ in range(40)],\n",
-    "})\n",
-    "\n",
-    "# --- 350 established users, signed up 30-730 days before the window start ---\n",
-    "window_start = datetime(2026, 1, 1)\n",
-    "users = pd.DataFrame({\n",
-    "    \"user_id\": range(1, 351),\n",
-    "    \"signup_date\": [window_start - timedelta(days=random.randint(30, 730)) for _ in range(350)],\n",
-    "})\n",
-    "\n",
-    "# --- 500 baseline transactions over a 30-day window ---\n",
-    "rows = []\n",
-    "for i in range(500):\n",
-    "    txn_time = window_start + timedelta(\n",
-    "        days=random.randint(0, 29), hours=random.randint(0, 23), minutes=random.randint(0, 59))\n",
-    "    status = np.random.choice([\"captured\", \"failed\", \"chargeback\"], p=[0.92, 0.06, 0.02])\n",
-    "    rows.append({\n",
-    "        \"transaction_id\": f\"TXN{100000+i}\",\n",
-    "        \"user_id\": random.randint(1, 350),\n",
-    "        \"merchant_id\": random.randint(1, 40),\n",
-    "        \"transaction_time\": txn_time,\n",
-    "        \"amount_inr\": np.random.choice(AMOUNTS_INR, p=AMOUNT_WEIGHTS),\n",
-    "        \"payment_method\": np.random.choice(METHODS, p=METHOD_WEIGHTS),\n",
-    "        \"status\": status,\n",
-    "        \"risk_score\": random.randint(0, 100),\n",
-    "    })\n",
-    "\n",
-    "# --- inject 15 \"burner account\" chargeback frauds: brand-new users (< 30 days old) ---\n",
-    "next_user_id = 351\n",
-    "for i in range(15):\n",
-    "    txn_time = window_start + timedelta(days=random.randint(10, 29), hours=random.randint(0, 23))\n",
-    "    signup = txn_time - timedelta(days=random.randint(1, 25))\n",
-    "    users = pd.concat([users, pd.DataFrame([{\"user_id\": next_user_id, \"signup_date\": signup}])],\n",
-    "                       ignore_index=True)\n",
-    "    rows.append({\n",
-    "        \"transaction_id\": f\"TXN{200000+i}\",\n",
-    "        \"user_id\": next_user_id,\n",
-    "        \"merchant_id\": random.randint(1, 40),\n",
-    "        \"transaction_time\": txn_time,\n",
-    "        \"amount_inr\": random.choice([999, 1999, 2999, 4999]),\n",
-    "        \"payment_method\": \"Card\",\n",
-    "        \"status\": \"chargeback\",\n",
-    "        \"risk_score\": random.randint(70, 100),\n",
-    "    })\n",
-    "    next_user_id += 1\n",
-    "\n",
-    "    # --- inject 8 velocity-attack clusters: 4 rapid-fire txns each within a 5-minute window ---\n",
-    "for cluster in range(8):\n",
-    "    victim_user = random.randint(1, 350)\n",
-    "    base_time = window_start + timedelta(days=random.randint(0, 29), hours=random.randint(0, 23))\n",
-    "    for k in range(4):\n",
-    "        rows.append({\n",
-    "            \"transaction_id\": f\"TXN{300000 + cluster*4 + k}\",\n",
-    "            \"user_id\": victim_user,\n",
-    "            \"merchant_id\": random.randint(1, 40),\n",
-    "            \"transaction_time\": base_time + timedelta(minutes=k),\n",
-    "            \"amount_inr\": random.choice([299, 399, 499]),\n",
-    "            \"payment_method\": \"Card\",\n",
-    "            \"status\": \"captured\" if k == 3 else \"failed\",\n",
-    "            \"risk_score\": random.randint(60, 95),\n",
-    "        })\n",
-    "\n",
-    "ledger = pd.DataFrame(rows)  # 500 + 15 + 32 = 547 rows\n",
-    "merchants.to_csv(\"merchants.csv\", index=False)\n",
-    "users.to_csv(\"users.csv\", index=False)\n",
-    "ledger.to_csv(\"ledger.csv\", index=False)\n",
-    "\n",
-    "# --- build the deliberately-discrepant \"gateway export\" copy for reconciliation ---\n",
-    "gateway = ledger.copy()\n",
-    "n = len(gateway)\n",
-    "missing_idx = np.random.choice(n, size=int(0.05 * n), replace=False)\n",
-    "gateway = gateway.drop(index=missing_idx).reset_index(drop=True)\n",
-    "\n",
-    "mismatch_idx = np.random.choice(len(gateway), size=int(0.03 * n), replace=False)\n",
-    "gateway.loc[mismatch_idx, \"amount_inr\"] = gateway.loc[mismatch_idx, \"amount_inr\"] + \\\n",
-    "    np.random.choice([-100, -50, 50, 100], size=len(mismatch_idx))\n",
-    "\n",
-    "extra_rows = []\n",
-    "for i in range(int(0.02 * n)):\n",
-    "    extra_rows.append({\n",
-    "        \"transaction_id\": f\"TXNX{9000+i}\", \"user_id\": random.randint(1, 350),\n",
-    "        \"merchant_id\": random.randint(1, 40),\n",
-    "        \"transaction_time\": window_start + timedelta(days=random.randint(0, 29)),\n",
-    "        \"amount_inr\": random.choice(AMOUNTS_INR), \"payment_method\": random.choice(METHODS),\n",
-    "        \"status\": \"captured\", \"risk_score\": random.randint(0, 100),\n",
-    "    })\n",
-    "gateway = pd.concat([gateway, pd.DataFrame(extra_rows)], ignore_index=True)\n",
-    "\n",
-    "status_idx = np.random.choice(len(gateway), size=int(0.02 * n), replace=False)\n",
-    "gateway.loc[status_idx, \"status\"] = \"failed\"\n",
-    "\n",
-    "gateway.to_csv(\"gateway_export.csv\", index=False)"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": 10,
-   "id": "d19b18d9-8873-441d-929b-332d16719535",
-   "metadata": {},
-   "outputs": [],
-   "source": []
-  }
- ],
- "metadata": {
-  "kernelspec": {
-   "display_name": "Python 3 (ipykernel)",
-   "language": "python",
-   "name": "python3"
-  },
-  "language_info": {
-   "codemirror_mode": {
-    "name": "ipython",
-    "version": 3
-   },
-   "file_extension": ".py",
-   "mimetype": "text/x-python",
-   "name": "python",
-   "nbconvert_exporter": "python",
-   "pygments_lexer": "ipython3",
-   "version": "3.13.9"
-  }
- },
- "nbformat": 4,
- "nbformat_minor": 5
-}
+import random
+import numpy as np
+import pandas as pd
+from datetime import datetime, timedelta
+
+random.seed(42)
+np.random.seed(42)
+CATEGORIES = ["grocery", "food_delivery", "recharge", "bill_payment", "travel",
+              "ecommerce", "entertainment"]
+REGIONS = ["North", "South", "East", "West"]
+METHODS = ["UPI", "Wallet", "Card", "Netbanking"]
+METHOD_WEIGHTS = [0.55, 0.20, 0.15, 0.10]
+AMOUNTS_INR = [49, 99, 149, 299, 499, 799, 1499, 2999, 4999]
+AMOUNT_WEIGHTS = [0.18, 0.16, 0.14, 0.14, 0.12, 0.10, 0.08, 0.05, 0.03]
+
+# --- 40 merchants ---
+merchants = pd.DataFrame({
+    "merchant_id": range(1, 41),
+    "merchant_name": [f"Merchant_{i:03d}" for i in range(1, 41)],
+    "category": [random.choice(CATEGORIES) for _ in range(40)],
+    "region": [random.choice(REGIONS) for _ in range(40)],
+})
+
+# --- 350 established users, signed up 30-730 days before the window start ---
+window_start = datetime(2026, 1, 1)
+users = pd.DataFrame({
+    "user_id": range(1, 351),
+    "signup_date": [window_start - timedelta(days=random.randint(30, 730)) for _ in range(350)],
+})
+
+# --- 500 baseline transactions over a 30-day window ---
+rows = []
+for i in range(500):
+    txn_time = window_start + timedelta(
+        days=random.randint(0, 29), hours=random.randint(0, 23), minutes=random.randint(0, 59))
+    status = np.random.choice(["captured", "failed", "chargeback"], p=[0.92, 0.06, 0.02])
+    rows.append({
+        "transaction_id": f"TXN{100000+i}",
+        "user_id": random.randint(1, 350),
+        "merchant_id": random.randint(1, 40),
+        "transaction_time": txn_time,
+        "amount_inr": np.random.choice(AMOUNTS_INR, p=AMOUNT_WEIGHTS),
+        "payment_method": np.random.choice(METHODS, p=METHOD_WEIGHTS),
+        "status": status,
+        "risk_score": random.randint(0, 100),
+    })
+
+# --- inject 15 "burner account" chargeback frauds: brand-new users (< 30 days old) ---
+next_user_id = 351
+for i in range(15):
+    txn_time = window_start + timedelta(days=random.randint(10, 29), hours=random.randint(0, 23))
+    signup = txn_time - timedelta(days=random.randint(1, 25))
+    users = pd.concat([users, pd.DataFrame([{"user_id": next_user_id, "signup_date": signup}])],
+                       ignore_index=True)
+    rows.append({
+        "transaction_id": f"TXN{200000+i}",
+        "user_id": next_user_id,
+        "merchant_id": random.randint(1, 40),
+        "transaction_time": txn_time,
+        "amount_inr": random.choice([999, 1999, 2999, 4999]),
+        "payment_method": "Card",
+        "status": "chargeback",
+        "risk_score": random.randint(70, 100),
+    })
+    next_user_id += 1
+
+    # --- inject 8 velocity-attack clusters: 4 rapid-fire txns each within a 5-minute window ---
+for cluster in range(8):
+    victim_user = random.randint(1, 350)
+    base_time = window_start + timedelta(days=random.randint(0, 29), hours=random.randint(0, 23))
+    for k in range(4):
+        rows.append({
+            "transaction_id": f"TXN{300000 + cluster*4 + k}",
+            "user_id": victim_user,
+            "merchant_id": random.randint(1, 40),
+            "transaction_time": base_time + timedelta(minutes=k),
+            "amount_inr": random.choice([299, 399, 499]),
+            "payment_method": "Card",
+            "status": "captured" if k == 3 else "failed",
+            "risk_score": random.randint(60, 95),
+        })
+
+ledger = pd.DataFrame(rows)  # 500 + 15 + 32 = 547 rows
+merchants.to_csv("merchants.csv", index=False)
+users.to_csv("users.csv", index=False)
+ledger.to_csv("ledger.csv", index=False)
+
+# --- build the deliberately-discrepant "gateway export" copy for reconciliation ---
+gateway = ledger.copy()
+n = len(gateway)
+missing_idx = np.random.choice(n, size=int(0.05 * n), replace=False)
+gateway = gateway.drop(index=missing_idx).reset_index(drop=True)
+
+mismatch_idx = np.random.choice(len(gateway), size=int(0.03 * n), replace=False)
+gateway.loc[mismatch_idx, "amount_inr"] = gateway.loc[mismatch_idx, "amount_inr"] + \
+    np.random.choice([-100, -50, 50, 100], size=len(mismatch_idx))
+
+extra_rows = []
+for i in range(int(0.02 * n)):
+    extra_rows.append({
+        "transaction_id": f"TXNX{9000+i}", "user_id": random.randint(1, 350),
+        "merchant_id": random.randint(1, 40),
+        "transaction_time": window_start + timedelta(days=random.randint(0, 29)),
+        "amount_inr": random.choice(AMOUNTS_INR), "payment_method": random.choice(METHODS),
+        "status": "captured", "risk_score": random.randint(0, 100),
+    })
+gateway = pd.concat([gateway, pd.DataFrame(extra_rows)], ignore_index=True)
+
+status_idx = np.random.choice(len(gateway), size=int(0.02 * n), replace=False)
+gateway.loc[status_idx, "status"] = "failed"
+
+gateway.to_csv("gateway_export.csv", index=False)
